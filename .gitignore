@@ -1,0 +1,41 @@
+.build/
+build/
+DerivedData/
+.DS_Store
+*.app/
+*.xcarchive/
+*.dSYM/
+*.zip
+*.dmg
+*.pkg
+*.log
+*.xcuserstate
+xcuserdata/
+__pycache__/
+*.pyc
+
+# Signing material and local environment configuration never belong in source.
+*.p12
+*.pfx
+*.p8
+*.key
+*.cer
+*.pem
+*.mobileprovision
+*.provisionprofile
+.env*
+
+# Personal vocabulary, captures, exports, settings, and local review evidence.
+[Vv]ocabulary*.json
+*.poseboard
+Application Support/
+UserData/
+Captures/
+Exports/
+LocalOnly/
+*.mov
+*.mp4
+*.heic
+*.jpg
+*.jpeg
+*.png
