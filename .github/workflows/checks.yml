@@ -1,0 +1,31 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check privacy safeguards and Git history
+        run: |
+          python3 Tests/PrivacyTests.py
+          python3 Scripts/privacy-check.py --history
+      - name: Test recognition and local storage
+        run: bash Scripts/test.sh
+      - name: Build without developer credentials
+        run: bash Scripts/build.sh
