@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleName</key><string>Poseboard</string>
+<key>CFBundleDisplayName</key><string>Poseboard</string>
+<key>CFBundleExecutable</key><string>Poseboard</string>
+<key>CFBundleIdentifier</key><string>org.poseboard.studio</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>0.1.0</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
+<key>LSMinimumSystemVersion</key><string>26.0</string>
+<key>NSPrincipalClass</key><string>NSApplication</string>
+<key>NSHighResolutionCapable</key><true/>
+<key>NSCameraUsageDescription</key><string>Poseboard uses Apple Vision on your Mac to learn and recognize your two-hand poses. Camera images stay in memory and are never recorded or uploaded.</string>
+<key>NSCameraUseContinuityCameraDeviceType</key><true/>
+<key>NSHumanReadableCopyright</key><string>Poseboard contributors</string>
+</dict></plist>
