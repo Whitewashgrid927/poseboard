@@ -4,6 +4,16 @@ A local macOS app for a personal vocabulary of held two-hand poses. Apple Vision
 
 Requires an Apple-silicon Mac with macOS 26 or newer and a camera. The interface uses native SwiftUI Liquid Glass, including an expandable floating vocabulary panel.
 
+## Download and install
+
+Download [Poseboard 0.1.0 for Apple silicon](https://github.com/Whitewashgrid927/poseboard/releases/download/v0.1.0/Poseboard-0.1.0-macOS-arm64.zip). No source build is needed.
+
+1. Unzip the download and drag **Poseboard.app** into **Applications**.
+2. Open Poseboard from Applications.
+3. Click **Start camera** when you are ready, then allow the normal macOS Camera prompt.
+
+The release is signed with Apple Developer ID and notarized by Apple. The [release page](https://github.com/Whitewashgrid927/poseboard/releases/tag/v0.1.0) includes checksums, installation notes, and the matching source archive. Camera access starts off, and personal vocabularies are never included in a download.
+
 ## Try it
 
 1. Open Poseboard and click **Start camera**. Allow macOS Camera access when prompted.
@@ -38,7 +48,7 @@ python3 Tests/PrivacyTests.py
 python3 Scripts/privacy-check.py --history
 ```
 
-`SIGNING_IDENTITY` may be supplied for local signing; without it the build uses an ad-hoc signature. No certificate, signing identity, developer account, or machine path is embedded in the source. This development build has not been notarized for distribution to other Macs.
+`SIGNING_IDENTITY` may be supplied for local signing; without it the build uses an ad-hoc signature. No certificate, signing identity, developer account, or machine path is embedded in the source. This script produces a local development build; the downloadable release above passes a separate Developer ID signing and notarization process. Run the history privacy check from a Git clone rather than an extracted source ZIP.
 
 The focused tests cover two-hand geometry, translation/scale invariance, distinct poses, ambiguity and collision rejection, missing/extra hands, stale frames, temporal holds, malformed storage, save/reload, and explicit message confirmation. Live camera accuracy must be checked using your own taught poses.
 
