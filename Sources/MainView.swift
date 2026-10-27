@@ -6,6 +6,9 @@ struct MainView: View {
     @State private var panelHeight: CGFloat = 358
     @State private var dragStart: CGFloat?
     @State private var query = ""
+    private var filteredMeanings: [Meaning] {
+        store.vocabulary.meanings.filter { query.isEmpty || $0.text.localizedCaseInsensitiveContains(query) }
+    }
     var body: some View {
         VStack(spacing:0) {
             toolbar
@@ -94,19 +97,9 @@ struct MainView: View {
                 }.padding(.horizontal,24).padding(.vertical,12)
                 ScrollView {
                     LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:10),count:3),spacing:10) {
-                        ForEach(store.vocabulary.meanings.filter { query.isEmpty || $0.text.localizedCaseInsensitiveContains(query) }) { meaning in
+                        ForEach(filteredMeanings) { meaning in
                             Button { store.detail = meaning } label: {
-                                HStack(spacing:13) {
-                                    Image(systemName:meaning.symbol.rawValue).font(.system(size:24,weight:.regular)).frame(width:32)
-                                    VStack(alignment:.leading,spacing:4) {
-                                        Text(meaning.text).font(.system(size:14,weight:.medium)).lineLimit(1)
-                                        Text(meaning.learned ? "View pose" : "Not taught yet").font(.system(size:10)).foregroundStyle(.secondary)
-                                    }
-                                    Spacer(minLength:0)
-                                }.foregroundStyle(store.draftID == meaning.id ? Color.indigo : Color.primary)
-                                    .padding(14).frame(maxWidth:.infinity,minHeight:68)
-                                    .background(store.draftID == meaning.id ? Color.indigo.opacity(0.14) : Color.white.opacity(0.20),in:RoundedRectangle(cornerRadius:17))
-                                    .overlay(RoundedRectangle(cornerRadius:17).stroke(store.draftID == meaning.id ? Color.indigo.opacity(0.6) : Color.white.opacity(0.45),lineWidth:1))
+                                VocabularyTile(meaning:meaning,selected:store.draftID == meaning.id)
                             }.buttonStyle(.plain).accessibilityLabel("\(meaning.text), \(meaning.learned ? "pose taught" : "not taught yet")")
                         }
                     }.padding(.horizontal,24).padding(.bottom,20)
@@ -115,6 +108,28 @@ struct MainView: View {
         }.frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.top)
             .glassEffect(.regular,in:.rect(cornerRadius:30))
             .shadow(color:.black.opacity(0.12),radius:22,y:10)
+    }
+}
+
+private struct VocabularyTile: View {
+    let meaning: Meaning
+    let selected: Bool
+    private var foreground: Color { selected ? .indigo : .primary }
+    private var fill: Color { selected ? .indigo.opacity(0.14) : .white.opacity(0.20) }
+    private var border: Color { selected ? .indigo.opacity(0.6) : .white.opacity(0.45) }
+    var body: some View {
+        HStack(spacing:13) {
+            Image(systemName:meaning.symbol.rawValue).font(.system(size:24,weight:.regular)).frame(width:32)
+            VStack(alignment:.leading,spacing:4) {
+                Text(meaning.text).font(.system(size:14,weight:.medium)).lineLimit(1)
+                Text(meaning.learned ? "View pose" : "Not taught yet").font(.system(size:10)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength:0)
+        }
+        .foregroundStyle(foreground)
+        .padding(14).frame(maxWidth:.infinity,minHeight:68)
+        .background(fill,in:RoundedRectangle(cornerRadius:17))
+        .overlay(RoundedRectangle(cornerRadius:17).stroke(border,lineWidth:1))
     }
 }
 
