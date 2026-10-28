@@ -117,7 +117,7 @@ struct MainView: View {
                     .accessibilityLabel("Prompt preview")
                 HStack(spacing:12) {
                     Text("Depth").font(.caption).foregroundStyle(.secondary)
-                    Picker("Depth",selection:Binding(get:{store.composer.depth},set:store.setDepth)) {
+                    Picker("Depth",selection:Binding(get:{store.composer.depth},set:{ store.setDepth($0) })) {
                         ForEach(PromptDepth.allCases,id:\.self) { Text($0.label).tag($0) }
                     }.pickerStyle(.segmented).frame(maxWidth:410).labelsHidden().disabled(store.composer.isEdited)
                     Spacer(minLength:8)
