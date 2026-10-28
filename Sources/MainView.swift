@@ -1,184 +1,235 @@
+import AppKit
 import SwiftUI
 
 struct MainView: View {
     @ObservedObject var store: PoseStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var panelHeight: CGFloat = 358
+    @State private var expanded = true
+    @State private var vocabularyHeight: CGFloat = 170
     @State private var dragStart: CGFloat?
     @State private var query = ""
-    private var filteredMeanings: [Meaning] {
-        store.vocabulary.meanings.filter { query.isEmpty || $0.text.localizedCaseInsensitiveContains(query) }
-    }
+    @State private var showInsertionHelp = false
+    @State private var clearConfirmation = false
     var body: some View {
-        VStack(spacing:0) {
-            toolbar
-            GeometryReader { geometry in
-                let maximum = min(540,geometry.size.height*0.75)
-                let height = min(maximum,max(126,panelHeight))
-                ZStack(alignment:.bottom) {
-                    CameraStage(store:store,bottomInset:height+22)
-                    vocabularyPanel(height:height,maximum:maximum)
-                        .frame(maxWidth:850).frame(height:height)
-                        .padding(.horizontal,28).padding(.bottom,22)
-                }.coordinateSpace(name:"stage").clipped()
-            }
+        ZStack {
+            LinearGradient(colors:[Color(red:0.89,green:0.93,blue:0.99),Color(red:0.97,green:0.93,blue:0.94),Color(red:0.85,green:0.91,blue:0.98)],startPoint:.topLeading,endPoint:.bottomTrailing)
+            VStack(spacing:16) {
+                toolbar
+                HStack(spacing:24) {
+                    VStack(alignment:.leading,spacing:9) {
+                        Text("Your hands. Your words.").font(.system(size:27,weight:.medium,design:.rounded))
+                        Text(store.running ? store.trackingText : "Teach signs. Combine them into a prompt.")
+                            .font(.callout).foregroundStyle(.secondary)
+                        Text(store.running && store.needsRelease ? "Lower both hands before the next sign." : "Your instructions stay exactly as you wrote them.")
+                            .font(.caption).foregroundStyle(store.needsRelease && store.running ? .indigo : .secondary)
+                    }
+                    Spacer()
+                    cameraTile.frame(width:220,height:120)
+                }.padding(.horizontal,10)
+                composerPanel
+            }.padding(.horizontal,28).padding(.bottom,24).padding(.top,12)
         }
-        .frame(minWidth:820,minHeight:650)
-        .background(.background)
+        .frame(minWidth:880,minHeight:740)
         .preferredColorScheme(.light)
-        .sheet(isPresented:Binding(get:{store.teaching != nil},set:{if !$0 { store.cancelCapture();store.teaching = nil }})) { TeachView(store:store) }
-        .sheet(item:$store.detail) { meaning in MeaningView(store:store,meaning:meaning) }
-        .sheet(item:$store.presenting) { meaning in MessageView(meaning:meaning) { store.presenting = nil; store.clearDraft() } }
+        .background(WindowPresentation(floating:store.floating))
+        .sheet(isPresented:Binding(get:{store.teaching != nil},set:{if !$0 { store.cancelCapture(); store.teaching = nil }})) { TeachView(store:store) }
+        .sheet(item:$store.detail) { MeaningView(store:store,meaning:$0) }
+        .sheet(item:Binding(get:{store.review},set:{if $0 == nil { store.cancelReview() }})) { ReviewView(store:store,review:$0) }
+        .sheet(isPresented:$store.editingDraft) {
+            PromptEditor(title:"Edit your prompt",subtitle:"Editing pauses sign additions. Your changes stay in this draft.",initial:store.composer.text,limit:PromptText.limit) { store.editPrompt($0) }
+        }
+        .sheet(isPresented:$store.editingContext) {
+            PromptEditor(title:"Context for this prompt",subtitle:"Paste text you choose to include. Context stays in memory until you clear or quit.",initial:store.composer.context,limit:8_000,allowsEmpty:true) { store.setContext($0) }
+        }
         .sheet(isPresented:$store.showPrivacy) { PrivacyView() }
+        .sheet(isPresented:$showInsertionHelp) { InsertionHelp() }
         .alert("Poseboard",isPresented:Binding(get:{store.error != nil},set:{if !$0 {store.error = nil}})) { Button("OK",role:.cancel) { store.error = nil } } message:{ Text(store.error ?? "") }
-        .onDisappear { store.stopCamera() }
+        .confirmationDialog("Clear this prompt and its context?",isPresented:$clearConfirmation,titleVisibility:.visible) {
+            Button("Clear prompt",role:.destructive) { store.clearPrompt() }
+        }
+        .onDisappear { store.cancelDelivery(); store.stopCamera() }
     }
     private var toolbar: some View {
-        ZStack {
-            Text("Communicate").font(.system(size:17,weight:.semibold))
-            HStack {
-                Text("Poseboard").font(.system(size:13,weight:.medium)).foregroundStyle(.secondary).padding(.leading,72)
-                Spacer()
-                Button { store.showPrivacy = true } label: { Image(systemName:"lock.shield").frame(width:22,height:22) }.buttonStyle(.glass).help("Local storage & privacy").accessibilityLabel("Local storage and privacy")
-                Menu {
-                    if store.running { Button("Stop camera") { store.stopCamera() } }
-                    else { Button("Start camera") { store.startCamera() } }
-                    Divider()
-                    Button("Default camera") { store.changeCamera(nil) }
-                    ForEach(PoseCamera.devices()) { device in Button(device.name) { store.changeCamera(device.id) } }
-                } label: { Image(systemName:store.running ? "video.fill" : "video.slash").frame(width:22,height:22) }
-                    .menuStyle(.borderlessButton).fixedSize().padding(8).glassEffect(.regular,in:.capsule).help("Camera controls").accessibilityLabel("Camera controls")
-            }
-        }.padding(.horizontal,18).frame(height:58).background(.ultraThinMaterial)
+        HStack(spacing:12) {
+            Text("Poseboard").font(.headline).padding(.leading,58)
+            Spacer()
+            Label("On device",systemImage:"lock.shield").font(.caption).foregroundStyle(.secondary)
+            Button { store.floating.toggle() } label: { Label(store.floating ? "Floating" : "Float",systemImage:store.floating ? "pin.fill" : "pin") }
+                .buttonStyle(.glass).tint(store.floating ? .indigo : nil)
+                .help("Keep this window above other apps. If the camera is on, tracking continues while this window stays visible.")
+            Menu {
+                Button(store.running ? "Stop camera" : "Start camera") { store.running ? store.stopCamera() : store.startCamera() }
+                Divider()
+                Button("Default camera") { store.changeCamera(nil) }
+                ForEach(PoseCamera.devices()) { device in Button(device.name) { store.changeCamera(device.id) } }
+            } label: { Image(systemName:store.running ? "video.fill" : "video.slash") }
+                .menuStyle(.borderlessButton).fixedSize().padding(8).glassEffect(.regular,in:.capsule).accessibilityLabel("Camera controls")
+            Button { store.showPrivacy = true } label: { Image(systemName:"info.circle") }.buttonStyle(.glass).accessibilityLabel("Privacy and help")
+        }.frame(height:32)
     }
-    private func resize(_ value: CGFloat) { withAnimation(reduceMotion ? nil : .spring(response:0.34,dampingFraction:0.88)) { panelHeight = value } }
-    private func vocabularyPanel(height: CGFloat,maximum: CGFloat) -> some View {
-        VStack(spacing:0) {
-            Capsule().fill(.secondary.opacity(0.4)).frame(width:42,height:4)
-                .frame(maxWidth:.infinity).frame(height:24).contentShape(Rectangle())
-                .onTapGesture { resize(height > 220 ? 126 : min(358,maximum)) }
-                .gesture(DragGesture(coordinateSpace:.named("stage")).onChanged { value in
-                    if dragStart == nil { dragStart = height }
-                    panelHeight = min(maximum,max(126,(dragStart ?? height)-value.translation.height))
-                }.onEnded { _ in
-                    dragStart = nil
-                    let snaps: [CGFloat] = [126,min(358,maximum),maximum]
-                    resize(snaps.min(by:{abs($0-panelHeight)<abs($1-panelHeight)}) ?? 358)
-                })
-                .accessibilityElement().accessibilityLabel(height > 220 ? "Collapse vocabulary" : "Expand vocabulary")
-                .accessibilityAddTraits(.isButton).accessibilityAction { resize(height > 220 ? 126 : min(358,maximum)) }
-                .accessibilityAdjustableAction { direction in resize(direction == .increment ? maximum : 126) }
-            HStack(spacing:16) {
-                Image(systemName:store.draft?.symbol.rawValue ?? "hand.wave").font(.system(size:28,weight:.medium)).foregroundStyle(.indigo)
-                    .frame(width:52,height:52).background(.white.opacity(0.25),in:RoundedRectangle(cornerRadius:16))
-                VStack(alignment:.leading,spacing:5) {
-                    Text(store.draft?.text ?? "Your next message").font(.system(size:25,weight:.medium,design:.rounded)).lineLimit(2).minimumScaleFactor(0.7)
-                    Text(store.draftStatus).font(.system(size:11)).foregroundStyle(.secondary).lineLimit(2)
-                }
-                Spacer(minLength:8)
-                if store.draft != nil {
-                    Button { store.clearDraft() } label: { Image(systemName:"xmark").font(.system(size:12)) }.buttonStyle(.plain).help("Clear message").accessibilityLabel("Clear message")
-                }
-                Button { store.showMessage() } label: { HStack { Text("Show"); Image(systemName:"arrow.right") }.padding(.horizontal,10).padding(.vertical,4) }
-                    .buttonStyle(.glassProminent).tint(.indigo).disabled(store.draft == nil)
-                Button { resize(height > 220 ? 126 : min(358,maximum)) } label: { Image(systemName:height > 220 ? "chevron.down" : "chevron.up") }
-                    .buttonStyle(.glass).help(height > 220 ? "Collapse vocabulary" : "Expand vocabulary").accessibilityLabel(height > 220 ? "Collapse vocabulary" : "Expand vocabulary")
-            }.padding(.horizontal,24).padding(.bottom,16)
-            if height > 220 {
-                Rectangle().fill(.primary.opacity(0.08)).frame(height:1).padding(.horizontal,24)
-                HStack {
-                    Text("Vocabulary").font(.system(size:14,weight:.semibold))
-                    Text("\(store.trainedCount) taught").font(.system(size:11)).foregroundStyle(.secondary)
-                    Spacer()
-                    if store.vocabulary.meanings.count > 9 {
-                        TextField("Search",text:$query).textFieldStyle(.roundedBorder).frame(width:130)
-                    }
-                    Button { store.beginTeaching() } label: { Label("Teach a pose",systemImage:"plus") }.buttonStyle(.glass).disabled(store.storageBlocked)
-                }.padding(.horizontal,24).padding(.vertical,12)
-                ScrollView {
-                    LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:10),count:3),spacing:10) {
-                        ForEach(filteredMeanings) { meaning in
-                            Button { store.detail = meaning } label: {
-                                VocabularyTile(meaning:meaning,selected:store.draftID == meaning.id)
-                            }.buttonStyle(.plain).accessibilityLabel("\(meaning.text), \(meaning.learned ? "pose taught" : "not taught yet")")
-                        }
-                    }.padding(.horizontal,24).padding(.bottom,20)
+    private var cameraTile: some View {
+        ZStack {
+            if store.running {
+                CameraPreview(camera:store.camera)
+                Landmarks(frame:store.frame)
+                VStack { Spacer(); HStack(spacing:5) {
+                    Circle().fill(.green).frame(width:5,height:5)
+                    Text(store.floating ? "Camera live · floating" : "Camera live").font(.system(size:10))
+                }.padding(6).glassEffect(.regular,in:.capsule).padding(7) }
+            } else {
+                VStack(spacing:12) {
+                    Image(systemName:"hands.sparkles").font(.system(size:25,weight:.light)).foregroundStyle(.indigo)
+                    if store.cameraState == .starting { ProgressView().controlSize(.small) }
+                    else { Button("Start camera") { store.startCamera() }.buttonStyle(.glass) }
                 }
             }
-        }.frame(maxWidth:.infinity,maxHeight:.infinity,alignment:.top)
-            .glassEffect(.regular,in:.rect(cornerRadius:30))
-            .shadow(color:.black.opacity(0.12),radius:22,y:10)
+        }.frame(maxWidth:.infinity,maxHeight:.infinity).background(.black.opacity(store.running ? 1 : 0.025))
+            .clipShape(RoundedRectangle(cornerRadius:22)).overlay(RoundedRectangle(cornerRadius:22).stroke(.white.opacity(0.65)))
+    }
+    private var composerPanel: some View {
+        GlassEffectContainer(spacing:12) {
+            VStack(spacing:14) {
+                handle
+                HStack {
+                    Text("Compose a prompt").font(.headline)
+                    Spacer()
+                    if store.serviceID != nil {
+                        Label("Insertion requested",systemImage:"text.cursor").font(.caption).foregroundStyle(.indigo)
+                        Button("Cancel insertion") { store.cancelDelivery() }.buttonStyle(.borderless)
+                    } else {
+                        Button("Connect to a text field") { showInsertionHelp = true }.buttonStyle(.borderless).font(.caption)
+                    }
+                }
+                signChips
+                HStack {
+                    Text(store.composer.isEdited ? "Your edited prompt" : "Your prompt").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    if store.composer.isEdited {
+                        Button("Use signs") { store.useSigns() }.font(.caption).buttonStyle(.borderless)
+                    }
+                    Button("Edit") { store.editingDraft = true }.font(.caption).buttonStyle(.borderless).disabled(store.composer.isEmpty)
+                }
+                ScrollView {
+                    Text(store.composer.isEmpty ? "Your prompt appears here as you add signs or choose phrases from your vocabulary." : store.composer.text)
+                        .font(.system(size:16)).foregroundStyle(store.composer.isEmpty ? .secondary : .primary)
+                        .textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading).padding(14)
+                }.frame(minHeight:82,maxHeight:140).background(.white.opacity(0.32),in:RoundedRectangle(cornerRadius:17))
+                    .accessibilityLabel("Prompt preview")
+                HStack(spacing:12) {
+                    Text("Depth").font(.caption).foregroundStyle(.secondary)
+                    Picker("Depth",selection:Binding(get:{store.composer.depth},set:{ store.setDepth($0) })) {
+                        ForEach(PromptDepth.allCases,id:\.self) { Text($0.label).tag($0) }
+                    }.pickerStyle(.segmented).frame(maxWidth:410).labelsHidden().disabled(store.composer.isEdited)
+                    Spacer(minLength:8)
+                    Button { store.editingContext = true } label: {
+                        Label(store.composer.context.isEmpty ? "Add context" : "Context added",systemImage:"text.quote")
+                    }.buttonStyle(.glass).disabled(store.composer.isEdited)
+                }
+                HStack(spacing:14) {
+                    Button { store.undoSign() } label: { Label("Undo",systemImage:"arrow.uturn.backward") }
+                        .buttonStyle(.borderless).disabled(store.composer.parts.isEmpty || store.composer.isEdited)
+                    Button("Clear") { clearConfirmation = true }.buttonStyle(.borderless).disabled(store.composer.isEmpty)
+                    Spacer()
+                    Text(store.serviceID == nil ? "Review before copying" : "Inserts a draft · never sends")
+                        .font(.system(size:11)).foregroundStyle(.secondary)
+                    Button(store.serviceID == nil ? "Review & copy" : "Review & insert") { store.reviewPrompt() }
+                        .buttonStyle(.glassProminent).tint(.indigo).disabled(store.composer.isEmpty)
+                }
+                if let notice = store.notice {
+                    Text(notice).font(.system(size:11)).foregroundStyle(.secondary).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)
+                }
+                if case .failed(let message) = store.cameraState {
+                    Text(message).font(.caption).foregroundStyle(.secondary).frame(maxWidth:.infinity,alignment:.leading)
+                }
+                if expanded { vocabulary }
+            }.padding(.horizontal,24).padding(.bottom,22)
+                .glassEffect(.regular,in:.rect(cornerRadius:30))
+                .shadow(color:.black.opacity(0.10),radius:22,y:12)
+        }
+    }
+    private var handle: some View {
+        Capsule().fill(.secondary.opacity(0.35)).frame(width:42,height:4)
+            .frame(maxWidth:.infinity).frame(height:19).contentShape(Rectangle())
+            .onTapGesture { toggleVocabulary() }
+            .gesture(DragGesture().onChanged { value in
+                if dragStart == nil { dragStart = expanded ? vocabularyHeight : 0 }
+                let height = (dragStart ?? 0)-value.translation.height
+                expanded = height > 70; vocabularyHeight = min(230,max(120,height))
+            }.onEnded { _ in dragStart = nil })
+            .accessibilityElement().accessibilityLabel(expanded ? "Collapse vocabulary" : "Expand vocabulary")
+            .accessibilityAddTraits(.isButton).accessibilityAction { toggleVocabulary() }
+    }
+    private func toggleVocabulary() {
+        withAnimation(reduceMotion ? nil : .spring(response:0.35,dampingFraction:0.88)) { expanded.toggle() }
+    }
+    private var signChips: some View {
+        ScrollView(.horizontal,showsIndicators:false) {
+            HStack(spacing:9) {
+                if store.composer.parts.isEmpty {
+                    Label("Make a sign or choose a phrase",systemImage:"hand.raised").font(.callout).foregroundStyle(.secondary).padding(12)
+                }
+                ForEach(store.composer.parts) { part in
+                    Label(part.name,systemImage:part.symbol.rawValue).font(.system(size:13,weight:.medium)).lineLimit(1)
+                        .padding(.horizontal,15).padding(.vertical,12)
+                        .glassEffect(.regular.tint(part.role == .instruction ? .indigo.opacity(0.18) : .clear),in:.capsule)
+                }
+            }.padding(2)
+        }.frame(height:48)
+    }
+    private var vocabulary: some View {
+        VStack(spacing:10) {
+            Divider().opacity(0.4)
+            HStack {
+                Text("Your vocabulary").font(.system(size:14,weight:.semibold))
+                Text("\(store.trainedCount) signs").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if store.vocabulary.meanings.count > 6 { TextField("Search",text:$query).textFieldStyle(.roundedBorder).frame(width:120) }
+                Button { store.beginTeaching() } label: { Label("Teach a sign",systemImage:"plus") }.buttonStyle(.glass).disabled(store.storageBlocked)
+                Button { toggleVocabulary() } label: { Image(systemName:"chevron.down") }.buttonStyle(.plain).accessibilityLabel("Collapse vocabulary")
+            }
+            if store.vocabulary.meanings.isEmpty {
+                VStack(spacing:8) {
+                    Text("A vocabulary that belongs to you").font(.callout.weight(.medium))
+                    Text("Give a sign a short name and write the full instruction it should add.").font(.caption).foregroundStyle(.secondary)
+                }.frame(maxWidth:.infinity,maxHeight:.infinity)
+            } else {
+                ScrollView {
+                    LazyVGrid(columns:Array(repeating:GridItem(.flexible(),spacing:10),count:4),spacing:10) {
+                        ForEach(store.vocabulary.meanings.filter { query.isEmpty || $0.text.localizedCaseInsensitiveContains(query) || $0.body.localizedCaseInsensitiveContains(query) }) { meaning in
+                            Button { store.detail = meaning } label: { VocabularyTile(meaning:meaning,selected:store.composer.parts.contains(where:{$0.meaningID == meaning.id})) }
+                                .buttonStyle(.plain).accessibilityLabel("\(meaning.text), \(meaning.learned ? "sign taught" : "phrase only")")
+                        }
+                    }.padding(2)
+                }
+            }
+        }.frame(height:vocabularyHeight)
     }
 }
 
 private struct VocabularyTile: View {
     let meaning: Meaning
     let selected: Bool
-    private var foreground: Color { selected ? .indigo : .primary }
-    private var fill: Color { selected ? .indigo.opacity(0.14) : .white.opacity(0.20) }
-    private var border: Color { selected ? .indigo.opacity(0.6) : .white.opacity(0.45) }
     var body: some View {
-        HStack(spacing:13) {
-            Image(systemName:meaning.symbol.rawValue).font(.system(size:24,weight:.regular)).frame(width:32)
-            VStack(alignment:.leading,spacing:4) {
-                Text(meaning.text).font(.system(size:14,weight:.medium)).lineLimit(1)
-                Text(meaning.learned ? "View pose" : "Not taught yet").font(.system(size:10)).foregroundStyle(.secondary)
-            }
-            Spacer(minLength:0)
-        }
-        .foregroundStyle(foreground)
-        .padding(14).frame(maxWidth:.infinity,minHeight:68)
-        .background(fill,in:RoundedRectangle(cornerRadius:17))
-        .overlay(RoundedRectangle(cornerRadius:17).stroke(border,lineWidth:1))
+        VStack(spacing:7) {
+            if let example = meaning.examples.first { PoseDrawing(signature:example).frame(height:62) }
+            else { Image(systemName:meaning.symbol.rawValue).font(.system(size:26,weight:.light)).frame(height:62) }
+            Text(meaning.text).font(.system(size:13,weight:.medium)).lineLimit(1)
+            Text(meaning.learned ? meaning.promptRole.label : "Phrase · sign not taught").font(.system(size:10)).foregroundStyle(.secondary)
+        }.frame(maxWidth:.infinity).padding(10).foregroundStyle(selected ? .indigo : .primary)
+            .background(selected ? .indigo.opacity(0.12) : .white.opacity(0.20),in:RoundedRectangle(cornerRadius:18))
+            .overlay(RoundedRectangle(cornerRadius:18).stroke(.white.opacity(0.6)))
     }
 }
 
-struct MeaningView: View {
-    @ObservedObject var store: PoseStore
-    let meaning: Meaning
-    @State private var deleting = false
-    var body: some View {
-        VStack(spacing:20) {
-            HStack { Image(systemName:meaning.symbol.rawValue).foregroundStyle(.indigo); Text(meaning.text).lineLimit(2); Spacer(); Button("Done") { store.detail = nil }.buttonStyle(.glass) }.font(.system(size:23,weight:.medium))
-            if let example = meaning.examples.first {
-                PoseDrawing(signature:example).frame(height:190).background(.indigo.opacity(0.04),in:RoundedRectangle(cornerRadius:20))
-                Text("Your saved pose · preview-left and preview-right").font(.system(size:12)).foregroundStyle(.secondary)
-            } else {
-                Image(systemName:"hands.sparkles").font(.system(size:46,weight:.ultraLight)).foregroundStyle(.indigo).frame(height:90)
-                Text("This meaning is ready for your own two-hand pose.").multilineTextAlignment(.center)
-                Text("No gesture is assigned until you teach it.").font(.system(size:12)).foregroundStyle(.secondary)
-            }
-            HStack {
-                Button("Delete",role:.destructive) { deleting = true }.buttonStyle(.borderless)
-                Spacer()
-                Button("Use message") { store.choose(meaning) }.buttonStyle(.glass)
-                Button(meaning.learned ? "Teach again" : "Teach this pose") { store.beginTeaching(meaning) }.buttonStyle(.glassProminent).tint(.indigo).disabled(store.storageBlocked)
-            }
-        }.padding(28).frame(width:520)
-            .confirmationDialog("Delete this meaning and its saved pose?",isPresented:$deleting,titleVisibility:.visible) { Button("Delete",role:.destructive) { store.remove(meaning) }; Button("Cancel",role:.cancel) {} }
-    }
-}
-struct MessageView: View {
-    let meaning: Meaning
-    let done: () -> Void
-    var body: some View {
-        VStack(spacing:28) {
-            Image(systemName:meaning.symbol.rawValue).font(.system(size:88,weight:.light)).foregroundStyle(.indigo)
-            Text(meaning.text).font(.system(size:46,weight:.semibold,design:.rounded)).multilineTextAlignment(.center).minimumScaleFactor(0.5).lineLimit(4)
-            Button("Done",action:done).buttonStyle(.glass).keyboardShortcut(.cancelAction)
-        }.padding(50).frame(width:650,height:420).background(.background)
-    }
-}
-struct PrivacyView: View {
-    @Environment(\.dismiss) private var dismiss
-    var body: some View {
-        VStack(alignment:.leading,spacing:18) {
-            Label("Only on your Mac",systemImage:"lock.shield").font(.title2.weight(.semibold))
-            Text("Camera frames are processed in memory by Apple Vision. Poseboard does not record photos or video, use a microphone, or send data over the network.")
-            Text("Teaching saves normalized hand landmarks, your chosen symbols, and your message text in this app’s local storage. You can delete individual entries from the vocabulary.")
-            Text("Recognition proposes a message. You choose when to show it. The camera pauses when the app goes into the background, the window closes, or your Mac sleeps or locks.")
-            Text("This is a personal vocabulary of held two-hand poses. It does not translate an existing sign language. A camera needs a clear view of both hands; overlapping or hidden fingers may prevent recognition.").font(.callout).foregroundStyle(.secondary)
-            HStack { Spacer(); Button("Done") { dismiss() }.buttonStyle(.glassProminent) }
-        }.padding(30).frame(width:510)
+private struct WindowPresentation: NSViewRepresentable {
+    let floating: Bool
+    func makeNSView(context: Context) -> NSView { NSView() }
+    func updateNSView(_ view: NSView,context: Context) {
+        let floating = floating
+        Task { @MainActor in
+            guard let window = view.window else { return }
+            window.level = floating ? .floating : .normal
+            window.collectionBehavior = floating ? [.canJoinAllSpaces,.fullScreenAuxiliary] : [.managed]
+        }
     }
 }
