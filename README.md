@@ -11,9 +11,18 @@ The interface uses native SwiftUI Liquid Glass with an expandable vocabulary pan
 
 ## Download
 
-The latest published download is on the [releases page](https://github.com/Whitewashgrid927/poseboard/releases).
-The source on this branch includes the 0.2.0 prompt composer. A source change does
-not by itself publish a downloadable update.
+[Download Poseboard 0.2.0 for Apple silicon](https://github.com/Whitewashgrid927/poseboard/releases/download/v0.2.0/Poseboard-0.2.0-macOS-arm64.zip).
+No Xcode or source build is needed.
+
+1. Unzip the download and drag **Poseboard.app** into **Applications**.
+2. Open Poseboard. Camera capture starts off.
+3. Choose **Teach a sign**, enter the text it should add, and start the camera
+   when you are ready to capture your three examples.
+
+The app is signed with Apple Developer ID and notarized by Apple. The
+[0.2.0 release page](https://github.com/Whitewashgrid927/poseboard/releases/tag/v0.2.0)
+includes installation instructions, checksums, and the matching source archive.
+Your saved vocabulary is stored separately and is not included in a download.
 
 ## Teach and compose
 
