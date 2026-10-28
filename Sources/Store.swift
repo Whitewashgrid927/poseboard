@@ -22,6 +22,11 @@ struct Teaching: Identifiable {
     var finished: Bool { examples.count == 3 }
 }
 
+struct ContextEditing: Identifiable {
+    let id = UUID()
+    let card: PromptContext?
+}
+
 @MainActor final class PoseStore: ObservableObject {
     @Published private(set) var vocabulary = Vocabulary.starter
     @Published private(set) var cameraState: CameraState = .off
@@ -39,7 +44,8 @@ struct Teaching: Identifiable {
     @Published private(set) var needsRelease = false
     @Published var floating = false
     @Published var editingDraft = false
-    @Published var editingContext = false
+    @Published var contextEditor: ContextEditing?
+    @Published var showInsertionHelp = false
     @Published private(set) var serviceID: UUID?
     var finishService: ((String?) -> Void)?
     private var generation = UUID()
@@ -128,7 +134,7 @@ struct Teaching: Identifiable {
         else if signature == nil { trackingText = "Separate your hands and keep your fingers visible" }
         else { trackingText = "Both hands visible" }
         if teaching != nil { currentMatch = nil; recognizer.reset(); train(signature,time:next.time); return }
-        guard detail == nil, review == nil, !editingDraft, !editingContext, !showPrivacy else {
+        guard detail == nil, review == nil, !editingDraft, contextEditor == nil, !showPrivacy, !showInsertionHelp else {
             resetRecognition(requiringRelease:true); return
         }
         signLatch.observe(next,now:now)
@@ -156,7 +162,7 @@ struct Teaching: Identifiable {
         }
     }
     func beginTeaching(_ meaning: Meaning? = nil, editText: Bool = false) {
-        guard review == nil, teaching == nil else { return }
+        guard review == nil, teaching == nil, contextEditor == nil, !editingDraft, !showInsertionHelp else { return }
         guard !storageBlocked else { error = "Your existing vocabulary needs to be restored before teaching can save changes."; return }
         guard meaning != nil || vocabulary.meanings.count < 100 else { error = "Your vocabulary can contain up to 100 meanings."; return }
         detail = nil; resetRecognition(requiringRelease:true)
@@ -243,9 +249,35 @@ struct Teaching: Identifiable {
         guard review == nil else { return }
         do { try composer.setDepth(depth) } catch { self.error = error.localizedDescription }
     }
-    func setContext(_ text: String) {
-        guard review == nil else { return }
-        do { try composer.setContext(text); editingContext = false; resetRecognition(requiringRelease:true) }
+    func beginContext(_ card: PromptContext? = nil) {
+        guard review == nil, teaching == nil, detail == nil, contextEditor == nil, !editingDraft, !showPrivacy, !showInsertionHelp, !composer.isEdited else { return }
+        guard card != nil || composer.contexts.count < PromptContext.maximumCards else { return }
+        resetRecognition(requiringRelease:true)
+        contextEditor = .init(card:card)
+    }
+    func saveContext(title: String,body: String) {
+        guard review == nil, let session = contextEditor else { return }
+        do {
+            let title = title.trimmingCharacters(in:.whitespacesAndNewlines)
+            if let card = session.card { try composer.updateContext(id:card.id,title:title,body:body) }
+            else { try composer.addContext(.init(title:title,body:body)) }
+            contextEditor = nil; resetRecognition(requiringRelease:true)
+            notice = "Context saved in this draft only. Review the full prompt before insertion."
+        }
+        catch { self.error = error.localizedDescription }
+    }
+    func includeContext(_ card: PromptContext,included: Bool) {
+        guard review == nil, contextEditor == nil else { return }
+        do {
+            try composer.setContextIncluded(id:card.id,included:included)
+            resetRecognition(requiringRelease:true)
+            notice = included ? "“\(card.title)” is included in the prompt." : "“\(card.title)” is kept here but excluded from the prompt."
+        }
+        catch { self.error = error.localizedDescription }
+    }
+    func removeContext(_ card: PromptContext) {
+        guard review == nil, contextEditor == nil else { return }
+        do { try composer.removeContext(id:card.id); resetRecognition(requiringRelease:true); notice = "Context card removed from this draft." }
         catch { self.error = error.localizedDescription }
     }
     func editPrompt(_ text: String) {
@@ -258,7 +290,7 @@ struct Teaching: Identifiable {
     func clearPrompt() { guard review == nil else { return }; composer.clear(); resetRecognition(requiringRelease:true) }
     var deliveryDestination: DeliveryDestination { serviceID.map(DeliveryDestination.service) ?? .clipboard }
     func reviewPrompt(now: Double = ProcessInfo.processInfo.systemUptime) {
-        guard !composer.isEmpty, teaching == nil, !editingDraft, !editingContext, review == nil else { return }
+        guard !composer.isEmpty, teaching == nil, !editingDraft, contextEditor == nil, !showPrivacy, !showInsertionHelp, detail == nil, review == nil else { return }
         do { try PromptText.validate(composer.text) } catch { self.error = error.localizedDescription; return }
         resetRecognition(requiringRelease:true)
         review = .init(revision:composer.revision,text:composer.text,destination:deliveryDestination,createdAt:now)
@@ -273,7 +305,7 @@ struct Teaching: Identifiable {
     }
     func cancelReview() { review = nil; resetRecognition(requiringRelease:true) }
     func beginService(_ id: UUID) -> Bool {
-        guard serviceID == nil, teaching == nil, detail == nil, review == nil, !editingDraft, !editingContext, !showPrivacy else { return false }
+        guard serviceID == nil, teaching == nil, detail == nil, review == nil, !editingDraft, contextEditor == nil, !showPrivacy, !showInsertionHelp else { return false }
         serviceID = id; notice = nil; resetRecognition(requiringRelease:true); return true
     }
     func endService() { serviceID = nil; finishService = nil; cancelReview() }

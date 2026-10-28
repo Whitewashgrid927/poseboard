@@ -15,7 +15,7 @@ import AppKit
         Window("Poseboard",id:"main") {
             MainView(store:store).onAppear { delegate.store = store; delegate.promptService.store = store }
         }
-        .defaultSize(width:1060,height:840)
+        .defaultSize(width:1060,height:900)
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
         .commands {

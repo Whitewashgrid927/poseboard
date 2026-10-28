@@ -128,6 +128,7 @@ import Foundation
         let retained = try Data(contentsOf:invalidURL)
         expect(String(data:retained,encoding:.utf8) == "broken","Even deletion cannot overwrite a corrupt saved library")
         try composerChecks(a:a,b:b,signature:signature,temp:temp)
+        try contextChecks(a:a,temp:temp)
         print("\(checks-failures)/\(checks) checks passed")
         if failures > 0 { exit(1) }
     }
@@ -145,10 +146,11 @@ import Foundation
         expect(composer.depth == .original,"Depth defaults to preserving saved text")
         try composer.setDepth(.detailed)
         expect(composer.text.hasSuffix(PromptDepth.detailed.instruction!),"Depth adds an explicit visible instruction")
-        try composer.setContext("A selected passage.")
-        expect(composer.text.hasSuffix("Context supplied for this prompt:\nA selected passage."),"Only supplied context is included")
+        let context = PromptContext(title:"Passage",body:"A selected passage.")
+        try composer.addContext(context)
+        expect(composer.text.hasSuffix("Context — Passage:\nA selected passage."),"Only supplied context is included")
         let full = composer
-        rejects("Context size limit preserves the draft") { try composer.setContext(String(repeating:"x",count:8_001)) }
+        rejects("Context size limit preserves the draft") { try composer.updateContext(id:context.id,title:context.title,body:String(repeating:"x",count:8_001)) }
         expect(composer == full,"Failed context edit is atomic")
         try composer.edit("My revised draft\nwith another paragraph.")
         expect(composer.isEdited && composer.text == "My revised draft\nwith another paragraph.","Manual edits remain exact")
@@ -161,7 +163,7 @@ import Foundation
         composer.undo()
         expect(composer.parts.count == 1 && composer.parts.first?.meaningID == a.id,"Undo removes the last sign only")
         composer.clear()
-        expect(composer.isEmpty && composer.context.isEmpty && composer.parts.isEmpty,"Clear removes prompt and context")
+        expect(composer.isEmpty && composer.contexts.isEmpty && composer.parts.isEmpty,"Clear removes prompt and context")
         for _ in 0..<12 { try composer.add(a) }
         rejects("Composition is bounded to twelve signs") { try composer.add(a) }
         var large = PromptComposer(), long = a
@@ -270,5 +272,99 @@ import Foundation
         store.saveTeaching()
         expect(store.vocabulary.meanings.first?.examples == instruction.examples,"Text edits preserve saved hand examples")
         expect(store.vocabulary.meanings.first?.body == "Edited paragraphs\n\nWithout new training.","Text edits support multiple paragraphs")
+    }
+    static func contextChecks(a: Meaning,temp: URL) throws {
+        let first = PromptContext(title:"Option A",body:"First approach.\n\nKeep this paragraph, too.")
+        let second = PromptContext(title:"Option B",body:"Second approach: preserve punctuation — and spacing.")
+        var composer = PromptComposer()
+        try composer.addContext(first); try composer.addContext(second)
+        expect(composer.contexts == [first,second],"Cards retain their identities and insertion order")
+        expect(composer.text == "Context — Option A:\n"+first.body+"\n\nContext — Option B:\n"+second.body,"Included context is labeled and preserved verbatim")
+        expect(composer.blocks.map(\.text).joined(separator:"\n\n") == composer.text,"Preview blocks assemble the exact delivery text")
+        try composer.setDepth(.detailed)
+        expect(composer.blocks.first?.kind == .depth,"Context-only drafts honor the visible depth selection")
+        let review = PromptReview(revision:composer.revision,text:composer.text,destination:.clipboard,createdAt:10)
+        try composer.setContextIncluded(id:second.id,included:false)
+        expect(!composer.text.contains(second.body) && composer.contexts[1].body == second.body,"Excluded context stays editable but never enters the prompt")
+        rejects("Changing included context invalidates prior review") { try review.validate(composer:composer,destination:.clipboard,now:11) }
+        try composer.updateContext(id:second.id,title:"Other option",body:"Revised text")
+        expect(!composer.contexts[1].isIncluded && !composer.text.contains("Revised text"),"Editing excluded context does not silently include it")
+        try composer.setContextIncluded(id:second.id,included:true)
+        expect(composer.text.hasSuffix("Context — Other option:\nRevised text"),"Reincluding a card uses the latest explicit text")
+        let before = composer
+        rejects("Duplicate context identity is rejected") { try composer.addContext(first) }
+        rejects("Missing card cannot be edited") { try composer.updateContext(id:UUID(),title:"Missing",body:"Text") }
+        rejects("Missing card cannot be selected") { try composer.setContextIncluded(id:UUID(),included:true) }
+        rejects("Missing card cannot be removed") { try composer.removeContext(id:UUID()) }
+        expect(composer == before,"Rejected identity changes leave the entire draft intact")
+        rejects("Context labels cannot insert extra headings") { try composer.updateContext(id:first.id,title:"Title\nInjected",body:"Text") }
+        rejects("Empty card text is rejected") { try composer.updateContext(id:first.id,title:"Title",body:" \n\t") }
+        rejects("Oversized card labels are rejected") { try composer.updateContext(id:first.id,title:String(repeating:"x",count:81),body:"Text") }
+        rejects("Context control characters are rejected") { try composer.updateContext(id:first.id,title:"Title",body:"Text\u{1B}[2J") }
+        expect(composer == before,"Invalid text never replaces a previously valid card")
+        let editReview = PromptReview(revision:composer.revision,text:composer.text,destination:.clipboard,createdAt:20)
+        try composer.updateContext(id:first.id,title:first.title,body:"Explicitly changed")
+        rejects("Editing a card invalidates confirmation") { try editReview.validate(composer:composer,destination:.clipboard,now:21) }
+        try composer.edit("A manual draft.")
+        let manual = composer
+        rejects("Adding cards cannot overwrite manual text") { try composer.addContext(.init(title:"New",body:"Text")) }
+        rejects("Editing cards cannot overwrite manual text") { try composer.updateContext(id:first.id,title:"Changed",body:"Text") }
+        rejects("Removing cards cannot overwrite manual text") { try composer.removeContext(id:first.id) }
+        rejects("Selecting cards cannot overwrite manual text") { try composer.setContextIncluded(id:first.id,included:false) }
+        expect(composer == manual,"Manual drafts and their suspended card composition remain exact")
+        composer.useSigns()
+        try composer.removeContext(id:first.id)
+        expect(composer.contexts.count == 1 && !composer.text.contains("Explicitly changed"),"Removing a card removes all of its text")
+        try composer.setContextIncluded(id:second.id,included:false)
+        expect(composer.isEmpty && composer.hasContent,"Excluded-only drafts remain clearable without enabling delivery")
+        composer.clear()
+        expect(composer.contexts.isEmpty && !composer.hasContent,"Clear removes included and excluded context")
+
+        var bounded = PromptComposer()
+        for index in 0..<4 { try bounded.addContext(.init(title:"Card \(index)",body:String(repeating:"x",count:2_000))) }
+        let limit = bounded
+        rejects("All card text is bounded together") { try bounded.updateContext(id:bounded.contexts[0].id,title:"Longer",body:String(repeating:"x",count:2_001)) }
+        rejects("At most four cards can be retained") { try bounded.addContext(.init(title:"Fifth",body:"Text")) }
+        expect(bounded == limit,"Card limits fail atomically")
+        for card in bounded.contexts { try bounded.setContextIncluded(id:card.id,included:false) }
+        rejects("Excluded cards still count toward the memory bound") { try bounded.updateContext(id:bounded.contexts[0].id,title:"Longer",body:String(repeating:"x",count:2_001)) }
+        var long = a; long.prompt = String(repeating:"y",count:8_000)
+        var full = PromptComposer(); try full.add(long); try full.add(long)
+        let fullBefore = full
+        rejects("Card selection respects the total prompt bound") { try full.addContext(.init(title:"Context",body:String(repeating:"z",count:8_000))) }
+        expect(full == fullBefore,"Oversized combined prompt cannot partially add context")
+        for starter in PromptStarter.allCases {
+            try starter.meaning.validate()
+            expect(!starter.meaning.learned,"Starter phrases never pretend to be learned signs")
+        }
+
+        let path = temp.appendingPathComponent("context-store/Vocabulary.json")
+        try VocabularyIO.save(.init(meanings:[a]),to:path)
+        let vocabularyBytes = try Data(contentsOf:path)
+        let store = PoseStore(storage:path,observeSystem:false)
+        store.beginContext()
+        expect(store.contextEditor != nil && store.needsRelease,"Opening context editing pauses and rearms recognition")
+        expect(!store.beginService(UUID()),"Insertion cannot interrupt a context editor")
+        store.choose(a); store.reviewPrompt(now:30)
+        expect(store.review == nil,"Context editing cannot start a review")
+        store.saveContext(title:first.title,body:first.body)
+        store.beginContext(); store.saveContext(title:second.title,body:second.body)
+        let retained = store.composer.contexts[1]
+        store.includeContext(retained,included:false)
+        let unchanged = try Data(contentsOf:path)
+        expect(unchanged == vocabularyBytes,"Context and starter actions never write user vocabulary")
+        let fresh = PoseStore(storage:path,observeSystem:false)
+        expect(fresh.composer.contexts.isEmpty && fresh.composer.isEmpty && fresh.vocabulary == store.vocabulary,"New sessions restore signs but retain no context or drafts")
+        store.reviewPrompt(now:40)
+        let snapshot = store.review!
+        let frozen = store.composer
+        store.includeContext(retained,included:true); store.removeContext(retained); store.beginContext(); store.saveContext(title:"Changed",body:"Changed")
+        expect(store.composer == frozen && store.contextEditor == nil,"All card mutations are blocked during confirmation")
+        expect(!snapshot.text.contains(second.body),"The reviewed snapshot omits every excluded card")
+        let delivered = store.confirmPrompt(id:snapshot.id,now:41)
+        expect(delivered?.0 == frozen.text && !delivered!.0.contains(second.body),"Confirmation delivers only included context in the exact reviewed prompt")
+        expect(store.confirmPrompt(id:snapshot.id,now:42) == nil,"Context composition still requires a new single-use confirmation")
+        store.showInsertionHelp = true; store.reviewPrompt(now:50)
+        expect(store.review == nil && !store.beginService(UUID()),"Insertion help cannot be interrupted by a review or service")
     }
 }

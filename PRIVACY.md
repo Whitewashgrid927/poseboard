@@ -17,9 +17,14 @@ first successful newer-format save preserves Vocabulary-v1-backup.json in the
 same private directory. Unknown or corrupt vocabularies are preserved and disable
 all vocabulary writes.
 
-Prompt drafts and user-supplied context exist only in memory. Phrases are joined
-verbatim. Depth adds a visible fixed instruction. There is no generative model
-rewriting text or inferring meaning from private app content.
+Prompt drafts and user-supplied context cards exist only in memory. Only cards
+explicitly included in the prompt contribute text to review and delivery. Excluded
+cards remain in memory until removed, cleared, or the app quits. Card titles and
+included text are visible in the review. Nothing is automatically collected from
+other apps or the clipboard. Phrases are joined verbatim. Depth adds a visible fixed
+instruction. There is no generative model rewriting text or inferring meaning from
+private app content. Starter phrases are not saved until you explicitly teach or
+save them.
 
 Copying requires review and confirmation and replaces the system clipboard.
 Poseboard does not read or archive existing clipboard contents. The clipboard

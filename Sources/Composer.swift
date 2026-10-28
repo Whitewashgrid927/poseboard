@@ -39,22 +39,71 @@ struct PromptPart: Identifiable, Equatable, Sendable {
     let role: PromptRole
 }
 
+/// Context is supplied explicitly and lives only in this draft, never in vocabulary storage.
+struct PromptContext: Identifiable, Equatable, Sendable {
+    static let maximumCards = 4
+    static let textLimit = 8_000
+    var id = UUID()
+    var title: String
+    var body: String
+    var isIncluded = true
+    func validate() throws {
+        try PromptText.validate(title,limit:80)
+        guard title.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) else {
+            throw PoseError("Keep the context title on one line.")
+        }
+        try PromptText.validate(body,limit:Self.textLimit)
+    }
+}
+
+struct PromptBlock: Identifiable, Equatable, Sendable {
+    enum Kind: Equatable, Sendable { case phrase, depth, context, edited }
+    let id: String
+    let text: String
+    let kind: Kind
+}
+
+/// Optional phrases are never saved or treated as learned signs until the user teaches them.
+enum PromptStarter: String, CaseIterable, Identifiable {
+    case compare, explain, challenge
+    var id: String { rawValue }
+    var title: String {
+        switch self { case .compare: "Compare"; case .explain: "Explain"; case .challenge: "Challenge assumptions" }
+    }
+    var meaning: Meaning {
+        let prompt: String
+        switch self {
+        case .compare: prompt = "Compare the supplied contexts. Explain their tradeoffs and recommend which approach to try first."
+        case .explain: prompt = "Explain the supplied context clearly, including the reasoning and useful examples."
+        case .challenge: prompt = "Challenge the assumptions. Identify weaknesses, missing evidence, and alternatives."
+        }
+        return Meaning(text:title,symbol:self == .challenge ? .question : .star,prompt:prompt,role:self == .challenge ? .modifier : .instruction)
+    }
+}
+
 /// A deterministic composer. Saved instructions are joined verbatim, never rewritten by a model.
 struct PromptComposer: Equatable, Sendable {
     private(set) var parts: [PromptPart] = []
     private(set) var depth = PromptDepth.original
-    private(set) var context = ""
+    private(set) var contexts: [PromptContext] = []
     private(set) var editedText: String?
     private(set) var revision = UUID()
-    var text: String {
-        if let editedText { return editedText }
-        var blocks = parts.map(\.body)
-        if !parts.isEmpty, let instruction = depth.instruction { blocks.append(instruction) }
-        if !context.isEmpty { blocks.append("Context supplied for this prompt:\n" + context) }
-        return blocks.joined(separator:"\n\n")
+    var blocks: [PromptBlock] {
+        if let editedText { return [.init(id:"edited",text:editedText,kind:.edited)] }
+        var result = parts.map { PromptBlock(id:$0.id.uuidString,text:$0.body,kind:.phrase) }
+        if (!parts.isEmpty || contexts.contains(where:\.isIncluded)), let instruction = depth.instruction {
+            result.append(.init(id:"depth",text:instruction,kind:.depth))
+        }
+        for context in contexts where context.isIncluded {
+            result.append(.init(id:context.id.uuidString,text:"Context — \(context.title):\n\(context.body)",kind:.context))
+        }
+        return result
     }
+    var text: String { blocks.map(\.text).joined(separator:"\n\n") }
     var isEmpty: Bool { text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty }
     var isEdited: Bool { editedText != nil }
+    var hasContent: Bool { !isEmpty || !contexts.isEmpty || !parts.isEmpty }
+    var contextCharacterCount: Int { contexts.reduce(0) { $0+$1.body.count } }
     mutating func add(_ meaning: Meaning) throws {
         guard !isEdited else { throw PoseError("This draft has manual edits. Keep editing it, or choose Use signs to return to your sign composition.") }
         guard parts.count < 12 else { throw PoseError("A prompt can combine up to 12 signs. Undo a sign or start a new prompt.") }
@@ -70,10 +119,34 @@ struct PromptComposer: Equatable, Sendable {
         if !candidate.isEmpty { try PromptText.validate(candidate.text) }
         candidate.revision = UUID(); self = candidate
     }
-    mutating func setContext(_ value: String) throws {
-        guard !isEdited else { throw PoseError("Choose Use signs before changing context.") }
-        if !value.isEmpty { try PromptText.validate(value,limit:8_000) }
-        var candidate = self; candidate.context = value
+    mutating func addContext(_ value: PromptContext) throws {
+        guard contexts.count < PromptContext.maximumCards else { throw PoseError("A draft can hold up to four context cards. Edit or remove a card first.") }
+        guard !contexts.contains(where:{$0.id == value.id}) else { throw PoseError("This context card is already in the draft.") }
+        var candidate = self; candidate.contexts.append(value)
+        try commitContexts(candidate)
+    }
+    mutating func updateContext(id: UUID,title: String,body: String) throws {
+        guard let index = contexts.firstIndex(where:{$0.id == id}) else { throw PoseError("This context card is no longer in the draft.") }
+        var candidate = self; candidate.contexts[index].title = title; candidate.contexts[index].body = body
+        try commitContexts(candidate)
+    }
+    mutating func setContextIncluded(id: UUID,included: Bool) throws {
+        guard let index = contexts.firstIndex(where:{$0.id == id}) else { throw PoseError("This context card is no longer in the draft.") }
+        var candidate = self; candidate.contexts[index].isIncluded = included
+        try commitContexts(candidate)
+    }
+    mutating func removeContext(id: UUID) throws {
+        guard contexts.contains(where:{$0.id == id}) else { throw PoseError("This context card is no longer in the draft.") }
+        var candidate = self; candidate.contexts.removeAll { $0.id == id }
+        try commitContexts(candidate)
+    }
+    private mutating func commitContexts(_ next: Self) throws {
+        guard !isEdited else { throw PoseError("Choose Use signs before changing context cards. Your edited prompt stays unchanged.") }
+        var candidate = next
+        for card in candidate.contexts { try card.validate() }
+        guard candidate.contextCharacterCount <= PromptContext.textLimit else {
+            throw PoseError("Context cards can hold up to 8,000 characters altogether, including cards not currently included.")
+        }
         if !candidate.isEmpty { try PromptText.validate(candidate.text) }
         candidate.revision = UUID(); self = candidate
     }
