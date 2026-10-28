@@ -1,30 +1,45 @@
 # Privacy
 
-Poseboard processes camera frames on the Mac using Apple's Vision framework.
-Frames remain in memory and are not recorded, logged, or uploaded. The app has
-no analytics, network client, microphone, screen recording, Accessibility, or
-automation permission. Its sandbox entitlements allow only the app sandbox and
-camera access.
+Poseboard processes camera frames locally using Apple Vision. Images stay in
+memory and are not recorded, logged, or uploaded. The sandbox allows only camera
+access. There is no analytics, network client, microphone, screen capture,
+Accessibility, Input Monitoring, Apple Events, or keyboard injection.
 
-Teaching saves the meaning text, chosen symbol, random entry ID, recognition
-tolerance, and three normalized pairs of hand landmarks. This personal vocabulary
-is stored in `Poseboard/Vocabulary.json` inside the app's local Application Support
-directory, within its sandbox container. It is not bundled with the app or part
-of this repository. It should be treated as personal data even without photos.
+Teaching saves the name, verbatim prompt text, selected symbol, role, random ID,
+recognition tolerance, and normalized hand landmarks. This is personal data even
+without photos. It stays in Poseboard/Vocabulary.json within the sandbox's local
+Application Support directory. It is not bundled with the app or included in Git.
 Deleting an entry removes it from the current vocabulary; system backups may
-retain earlier copies according to the user's backup settings.
+retain older copies.
 
-Camera identifiers are used in memory to select a device. They are not stored in
-the vocabulary or sent anywhere. The repository includes source, original icon
-drawing code, and synthetic tests only. It contains no trained personal vocabulary,
-camera captures, signing certificates, account credentials, or machine-specific
-configuration.
+Schema version 1 remains readable. Merely opening it does not rewrite it. The
+first successful newer-format save preserves Vocabulary-v1-backup.json in the
+same private directory. Unknown or corrupt vocabularies are preserved and disable
+all vocabulary writes.
 
-Local builds use ad-hoc signing unless a developer supplies their own signing
-identity through the environment. Do not commit that identity or its credentials.
-A separately distributed Apple-signed binary can disclose the certificate's
-developer name; source publication does not require distributing that binary.
+Prompt drafts and user-supplied context exist only in memory. Phrases are joined
+verbatim. Depth adds a visible fixed instruction. There is no generative model
+rewriting text or inferring meaning from private app content.
 
-When reporting a problem, describe the behavior without attaching your vocabulary,
-camera image, personal filesystem path, or full diagnostic archive. Review any
-attachment before sharing it.
+Copying requires review and confirmation and replaces the system clipboard.
+Poseboard does not read or archive existing clipboard contents. The clipboard
+receives a transient-content hint, which other software may choose to honor.
+System clipboard syncing or other applications' clipboard storage are outside
+Poseboard's control.
+
+Native text Services return only the exact confirmed prompt using the private
+pasteboard supplied by macOS for that explicit request. Poseboard does not inspect
+the destination UI or simulate a paste or Send key. A confirmation expires after
+90 seconds, is tied to one draft and request, and cannot be replayed. Destination
+apps control insertion and subsequent transmission.
+
+Camera startup is always explicit. It stops on backgrounding unless Float has
+been explicitly enabled for this session. The floating window must stay visible.
+Hiding/closing the window, sleep, and session deactivation stop capture and cancel
+pending insertion. Camera device identifiers are used in memory only.
+
+Signing identities, certificates, account credentials, camera captures, saved
+vocabularies, and machine-specific paths are excluded from source publication.
+An Apple-signed binary can disclose the certificate's developer name. Review
+attachments before sharing a bug report; do not attach private prompts, a
+vocabulary, camera images, or personal filesystem paths.

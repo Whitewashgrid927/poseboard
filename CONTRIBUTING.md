@@ -46,9 +46,14 @@ It does not upload an app, use signing credentials, or release a downloadable bu
 
 ## Preserve the app's boundaries
 
-Keep camera startup explicit, pause capture when inactive, and discard stale
-callbacks. Keep both-hand confidence, ambiguity, continuity, and stable-hold
-checks. Recognition proposes a draft; displaying it still requires confirmation.
+Keep camera startup explicit and discard stale callbacks. Capture pauses when
+inactive unless the user enables Float for the current session; visibility, sleep,
+and session-deactivation checks still apply. Keep both-hand confidence, ambiguity,
+continuity, stable holds, and the fresh zero-hand release gate between additions.
+Recognition only edits a local draft. Delivery requires an exact, expiring,
+single-use confirmation bound to the draft revision and requested destination.
+Keep the camera-only sandbox. Native Services return plain text only to the
+requesting service pasteboard. Do not add keyboard injection or press Send.
 Keep corrupt local vocabularies intact and writes blocked until loading succeeds.
 Do not add telemetry, network access, or automatic communication as incidental
 changes. Explain intentional changes to these boundaries in the PR.

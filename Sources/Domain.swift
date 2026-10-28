@@ -105,6 +105,11 @@ struct Meaning: Identifiable, Codable, Equatable, Sendable {
     var symbol: MeaningSymbol
     var examples: [PoseSignature] = []
     var tolerance = 0.15
+    // Optional fields decode older vocabularies without changing their stored text or poses.
+    var prompt: String?
+    var role: PromptRole?
+    var body: String { prompt ?? text }
+    var promptRole: PromptRole { role ?? .instruction }
     var learned: Bool { examples.count == 3 }
     func score(_ signature: PoseSignature) -> Double {
         guard learned else { return .infinity }
@@ -116,14 +121,15 @@ struct Meaning: Identifiable, Codable, Equatable, Sendable {
               text.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }),
               examples.isEmpty || examples.count == 3, tolerance.isFinite, (0.12...0.24).contains(tolerance) else { throw PoseError("This vocabulary entry is invalid.") }
         for example in examples { try example.validate() }
+        try PromptText.validate(body, limit:8_000)
     }
 }
 struct Vocabulary: Codable, Equatable, Sendable {
-    var version = 1
+    var version = 2
     var meanings: [Meaning]
-    static var starter: Self { .init(meanings: [.init(text:"Yes",symbol:.yes),.init(text:"No",symbol:.no),.init(text:"Thank you",symbol:.thanks),.init(text:"I need a break",symbol:.pause),.init(text:"Help",symbol:.help),.init(text:"Water",symbol:.water)]) }
+    static var starter: Self { .init(meanings: []) }
     func validate() throws {
-        guard version == 1, meanings.count <= 100, Set(meanings.map(\.id)).count == meanings.count else { throw PoseError("This vocabulary is invalid or from a newer app version.") }
+        guard [1,2].contains(version), meanings.count <= 100, Set(meanings.map(\.id)).count == meanings.count else { throw PoseError("This vocabulary is invalid or from a newer app version.") }
         for meaning in meanings { try meaning.validate() }
     }
     func match(_ signature: PoseSignature) -> UUID? {
@@ -166,8 +172,20 @@ enum VocabularyIO {
         let parent = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at:parent,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted,.sortedKeys]
-        let data = try encoder.encode(library)
+        var updated = library; updated.version = 2
+        let data = try encoder.encode(updated)
         guard data.count <= 2_000_000 else { throw PoseError("This vocabulary is too large to save.") }
+        // Preserve the original before the first intentional write in the newer format.
+        if FileManager.default.fileExists(atPath:url.path) {
+            let old = try load(url)
+            if old.version == 1 {
+                let backup = parent.appendingPathComponent("Vocabulary-v1-backup.json")
+                if !FileManager.default.fileExists(atPath:backup.path) {
+                    try FileManager.default.copyItem(at:url,to:backup)
+                    try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:backup.path)
+                }
+            }
+        }
         try data.write(to:url,options:.atomic)
         try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:url.path)
     }
