@@ -7,7 +7,9 @@ their landmarks with the examples you teach. Prompt assembly joins your exact
 text locally. No language model, account, API key, or network connection is needed.
 
 Requires an Apple-silicon Mac, macOS 26 or newer, and a camera for teaching signs.
-The interface uses native SwiftUI Liquid Glass with an expandable vocabulary panel.
+The interface uses native SwiftUI Liquid Glass, context cards, a live prompt
+composer, and an expandable vocabulary panel. The current source is 0.3.0; the
+download below is the most recent published release.
 
 ## Download
 
@@ -35,14 +37,37 @@ Your saved vocabulary is stored separately and is not included in a download.
 3. Hold a taught sign steadily. Its text joins the prompt once. Lower **both**
    hands for about half a second before adding the next sign. Ambiguous, stale,
    or low-confidence observations cannot append text.
-4. Choose an optional depth instruction, add context you explicitly paste, or
-   edit the assembled draft. Manual edits pause gesture additions until you
-   choose **Use signs**. **Undo** removes the last sign; **Clear** also removes context.
+4. Add named context cards with text you explicitly type or paste. Only cards with
+   **Include in prompt** checked enter the live draft. Choose an optional depth
+   instruction, or edit the assembled draft. Manual edits freeze sign additions,
+   cards, and depth until you choose **Use signs**. **Undo** removes the last sign;
+   **Clear** also removes every context card.
 5. Review the exact text before copying or inserting it. Poseboard never presses Send.
 
 You can save a phrase without a sign and add it by clicking its vocabulary tile.
 **Edit text** preserves a sign's saved examples; **Teach again** replaces them only
 after three new valid examples pass the conflict checks. New vocabularies are empty.
+
+## Context cards and the live composer
+
+For a quick trial, add **Option A** and **Option B** with two short ideas, click
+the **Compare** starter phrase, then choose **Detailed**. The exact prompt updates
+immediately. Use **Starter phrases → Challenge assumptions → Add phrase** to add
+that requirement, or choose **Teach my sign** to associate it with your own pose.
+Starter phrases do not create saved vocabulary entries or pretend to be learned signs.
+
+Each draft can hold four cards, with up to 8,000 characters of context altogether.
+Excluded cards still count toward that bound, remain editable, and contribute no
+text to delivery. Card titles are included in the prompt so the AI can distinguish
+the passages. Context and prompts stay in memory only. Neither is saved in the
+vocabulary, read from another app, or collected from the clipboard automatically.
+
+The live preview shows the same text that confirmation will deliver. Depth adds
+one visible instruction, highlighted in the preview, and replaces that instruction
+when changed. It never silently rewrites your phrases. The depth selector is a
+visible control; hand spacing remains part of identifying your taught poses.
+**Review prompt** opens the exact-text confirmation. Without a pending text Service
+request, confirmation copies; with one, confirmation returns text to that field.
 
 The vocabulary handle expands, collapses, and resizes the panel. **Float** keeps
 the window above other apps and, if the camera is already on, allows tracking
@@ -66,7 +91,7 @@ independently verify insertion without broader system access.
 
 Text Services support depends on the destination app and editable field.
 A universal cross-app insertion claim is not made. If the service is unavailable,
-use **Review & copy**, then paste manually. Copy replaces the system clipboard
+use **Review prompt → Confirm & copy**, then paste manually. Copy replaces the system clipboard
 only after confirmation. Poseboard keeps no clipboard history. The system or
 other clipboard tools can have their own storage or syncing behavior.
 
@@ -81,7 +106,7 @@ permission is needed.
   microphone access, external dependency, keyboard injection, or reading of other apps.
 - Saved vocabulary contains your labels, prompt text, symbols, roles, recognition
   tolerances, and three normalized pairs of landmarks for each taught sign.
-- Drafts and explicitly supplied context stay in memory, disappearing on quit.
+- Drafts and explicitly supplied context cards stay in memory, disappearing on quit.
   Only confirmed Copy or Service delivery transfers the prompt out of Poseboard.
   Sending it onward is controlled by your destination AI app.
 - Recognition requires exactly two observations, confident landmarks, a stable
@@ -110,7 +135,8 @@ Public releases require a separate Developer ID signing and notarization process
 
 Tests use synthetic landmarks and temporary stores. They cover recognition,
 ambiguity, stale frames, release rearming, composition bounds, verbatim paragraphs,
-old-vocabulary migration, corruption preservation, and confirmation identity,
+context selection and edits, excluded-card privacy, old-vocabulary migration,
+corruption preservation, and confirmation identity,
 destination, expiration, cancellation, and replay prevention. Automated checks
 do not establish live recognition accuracy for every user or destination-app compatibility.
 

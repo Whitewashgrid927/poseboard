@@ -101,7 +101,7 @@ struct InsertionHelp: View {
             Text("2. In that app’s menu, choose Services → Insert Poseboard Prompt.")
             Text("3. Review your prompt in Poseboard, then choose Confirm & insert.")
             Text("Keep the destination field unchanged until you confirm. The request expires after 90 seconds. You can assign a shortcut in System Settings → Keyboard → Keyboard Shortcuts → Services.").font(.callout).foregroundStyle(.secondary)
-            Text("If an app does not offer text Services, use Review & copy, then paste manually. This route preserves Poseboard’s camera-only sandbox.").font(.callout).foregroundStyle(.secondary)
+            Text("If an app does not offer text Services, choose Review prompt, then Confirm & copy and paste manually.").font(.callout).foregroundStyle(.secondary)
             HStack { Spacer(); Button("Done") { dismiss() }.buttonStyle(.glassProminent) }
         }.padding(30).frame(width:560)
     }
@@ -113,7 +113,7 @@ struct PrivacyView: View {
         VStack(alignment:.leading,spacing:18) {
             Label("Only on your Mac",systemImage:"lock.shield").font(.title2.weight(.semibold))
             Text("Apple Vision processes camera frames in memory. Poseboard does not record images, use a microphone, or connect to a network. Your own phrases and normalized hand landmarks stay in local storage.")
-            Text("Signs add exact saved text. Depth adds a visible instruction. Context and assembled drafts stay in memory and disappear when you quit. No language model rewrites your words.")
+            Text("Signs add exact saved text. Depth adds a visible instruction. Only included context cards enter the live prompt. Cards and assembled drafts stay in memory and disappear when you quit. No language model rewrites your words.")
             Text("Review the exact prompt before copying or returning it through a macOS text Service. Poseboard does not read other apps, simulate keystrokes, or press Send.")
             Text("Camera startup is explicit. Capture pauses when inactive unless you enable Float; the floating window must remain visible. Hiding or closing the window, sleep, and session lock always pause it.")
             Text("Exactly two confident hands, a stable match, and a clear difference from other signs are required. Lower both hands between signs. This is your personal vocabulary of stationary poses.").font(.callout).foregroundStyle(.secondary)
