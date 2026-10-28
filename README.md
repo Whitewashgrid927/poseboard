@@ -8,12 +8,11 @@ text locally. No language model, account, API key, or network connection is need
 
 Requires an Apple-silicon Mac, macOS 26 or newer, and a camera for teaching signs.
 The interface uses native SwiftUI Liquid Glass, context cards, a live prompt
-composer, and an expandable vocabulary panel. The current source is 0.3.0; the
-download below is the most recent published release.
+composer, and an expandable vocabulary panel. The current release is 0.3.0.
 
 ## Download
 
-[Download Poseboard 0.2.0 for Apple silicon](https://github.com/Whitewashgrid927/poseboard/releases/download/v0.2.0/Poseboard-0.2.0-macOS-arm64.zip).
+[Download Poseboard 0.3.0 for Apple silicon](https://github.com/Whitewashgrid927/poseboard/releases/download/v0.3.0/Poseboard-0.3.0-macOS-arm64.zip).
 No Xcode or source build is needed.
 
 1. Unzip the download and drag **Poseboard.app** into **Applications**.
@@ -22,7 +21,7 @@ No Xcode or source build is needed.
    when you are ready to capture your three examples.
 
 The app is signed with Apple Developer ID and notarized by Apple. The
-[0.2.0 release page](https://github.com/Whitewashgrid927/poseboard/releases/tag/v0.2.0)
+[0.3.0 release page](https://github.com/Whitewashgrid927/poseboard/releases/tag/v0.3.0)
 includes installation instructions, checksums, and the matching source archive.
 Your saved vocabulary is stored separately and is not included in a download.
 
